@@ -29,14 +29,7 @@ def _cum_CDF (x):
       axis=1 )
   return tf.reshape(y, [m,n] )
 
-
-class NimaUtils(object):
-  """Help Class for Nima calculations
-    NimaUtils.emd(y, y_hat) return float
-    NimaUtils.score( y ) returns [[mean, std]]
-  """
-  @staticmethod
-  def emd(y, y_hat):
+def _emd(y, y_hat):
     """Returns the earth mover distance between to arrays of ratings, 
     based on cumulative distribution function
     
@@ -54,6 +47,16 @@ class NimaUtils(object):
     emd_loss = tf.pow( tf.divide( tf.reduce_sum( tf.pow(cdf_loss, r), axis=1 ), N), 1/r)
   #   return tf.reshape(emd_loss, [m,1])
     return tf.reduce_mean(emd_loss)
+
+
+class NimaUtils(object):
+  """Help Class for Nima calculations
+    NimaUtils.emd(y, y_hat) return float
+    NimaUtils.score( y ) returns [[mean, std]]
+  """
+  @staticmethod
+  def emd(y, y_hat):
+    return _emd(y, y_hat)
 
   @staticmethod
   def mu(y, shape=None):
@@ -150,3 +153,83 @@ class TestNimaUtils(object):
     print("OK y=%s, \ny_hat=%s, \nEMD=%s  ==0.07387695461511612" % (y, y_hat, emd_loss))
 
 
+
+
+def slim_learning_create_train_op_with_manual_grads( total_loss, 
+            optimizers,       # list of optimizers 
+            grads_and_vars,   # list of grads_and_vars from optimizer.compute_gradients()
+            global_step=0,                                                            
+#                     update_ops=None,
+#                     variables_to_train=None,
+            clip_gradient_norm=0,
+            summarize_gradients=False,
+            gate_gradients=1,               # tf.python.training.optimizer.Optimizer.GATE_OP,
+            aggregation_method=None,
+            colocate_gradients_with_ops=False,
+            gradient_multipliers=None,
+            check_numerics=True):
+  """Runs the training loop
+      
+    modified from slim.learning.create_train_op() to work with
+    a matched list of optimizers and grads_and_vars
+
+    see:
+      https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/slim/python/slim/learning.py
+      https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/training/python/training/training.py
+  
+  Returns:
+      train_ops - the value of the loss function after training.
+  """
+  from tensorflow.python.framework import ops
+  from tensorflow.python.ops import array_ops
+  from tensorflow.python.ops import control_flow_ops
+  from tensorflow.python.training import training_util
+  
+  def transform_grads_fn(grads):
+      if gradient_multipliers:
+          with ops.name_scope('multiply_grads'):
+              grads = multiply_gradients(grads, gradient_multipliers)
+
+      # Clip gradients.
+      if clip_gradient_norm > 0:
+          with ops.name_scope('clip_grads'):
+              grads = clip_gradient_norms(grads, clip_gradient_norm)
+      return grads
+  
+  if global_step is None:
+      global_step = training_util.get_or_create_global_step()
+      
+  # we are assuming these are a matched set, should be zipped as a tuple(opt, grads, vars) 
+  assert len(optimizers)==len(grads_and_vars)
+  
+  ### order of processing:
+  # 0. grads = opt.compute_gradients() 
+  # 1. grads = transform_grads_fn(grads)
+  # 2. add_gradients_summaries(grads)
+  # 3. grads = opt.apply_gradients(grads, global_step=global_step) 
+  
+  grad_updates = []
+  for i in range(len(optimizers)):
+      grads = grads_and_vars[i]                               # 0. kvarg, from opt.compute_gradients()
+      grads = transform_grads_fn(grads)                       # 1. transform_grads_fn()
+      if summarize_gradients:
+          with ops.name_scope('summarize_grads'):
+              slim.learning.add_gradients_summaries(grads)    # 2. add_gradients_summaries()
+      if i==0:
+          grad_update = optimizers[i].apply_gradients( grads, # 3. optimizer.apply_gradients()
+                      global_step=global_step)                #    update global_step only once
+      else:
+          grad_update = optimizers[i].apply_gradients( grads )
+      grad_updates.append(grad_update)
+
+  with ops.name_scope('train_op'):
+      total_loss = array_ops.check_numerics(total_loss,
+                                      'LossTensor is inf or nan')
+      train_op = control_flow_ops.with_dependencies(grad_updates, total_loss)
+      
+  # Add the operation used for training to the 'train_op' collection    
+  train_ops = ops.get_collection_ref(ops.GraphKeys.TRAIN_OP)
+  if train_op not in train_ops:
+      train_ops.append(train_op)
+      
+  return train_op
