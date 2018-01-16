@@ -87,7 +87,7 @@ class NimaUtils(object):
     """    
     y = tf.convert_to_tensor(y)
     m,n = y.get_shape().as_list()    
-    mean = mu(y)
+    mean = NimaUtils.mu(y)
     s = tf.range(1, n+1 , dtype=tf.float32)
     p_score = tf.divide(y, tf.reshape(tf.reduce_sum(y, axis=1),[m,1]))
     stddev = tf.sqrt(tf.reduce_sum( tf.multiply(tf.square(tf.subtract(s,mean)),p_score), axis=1))
@@ -96,7 +96,7 @@ class NimaUtils(object):
   @staticmethod
   def score(y):
     """returns [mean quality score, stddev] for each row"""
-    return tf.concat([mu(y), sigma(y)], axis=1)
+    return tf.concat([NimaUtils.mu(y), NimaUtils.sigma(y)], axis=1)
 
 
 class TestNimaUtils(object):
