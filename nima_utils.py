@@ -154,6 +154,51 @@ class TestNimaUtils(object):
 
 
 
+# Nima Model based on Vgg16 for training against AVA dataset
+%cd $SLIM
+from nets import vgg
+from tensorflow.contrib import slim
+
+def nima_vgg16(inputs, num_classes, h_params):
+  """Build Nima model with baseline from Vgg16 (with last layer removed) and
+  finetune layer of fully_connected nodes with n=num_classes with softmax activations
+
+  Arguments:
+    inputs: Tensor of [m, 224,224,3] images
+    num_classes: number of classes for last fully_connected layer
+  
+  Returns:
+    Tuple (net, end_points)
+      net=Dictionary with 2 keys, ["baseline", "finetune"], and model as values
+      end_points: end points for the model
+  """
+  #
+  # load the model, use the default arg scope to configure the batch norm parameters.
+  #
+  net = { 
+      "baseline": "baseline image classifier with last layer removed", 
+      "finetune": "finetuning layer with softmax activations, n=10 for AVA, 9 for TID2013"
+  }
+  with slim.arg_scope(vgg.vgg_arg_scope()):
+      # define baseline network with last layer removed
+      net["baseline"], end_points = vgg.vgg_16(inputs, 
+#                                      dropout_keep_prob=0.5,
+                                    num_classes=None,
+                                    )
+      
+      # define finetuning network, dropout, fc, softmax
+      dropout_keep_prob=h_params["dropout_keep"]
+      net["finetune"] = slim.dropout( net["baseline"], dropout_keep_prob,
+                                      is_training=is_training,
+                                      scope='nima/dropout7' )
+      net["finetune"] = slim.fully_connected( net["finetune"], num_classes,
+                                              activation_fn=tf.nn.softmax,
+                                              scope='nima/fc8' )
+      end_points["nima/fc8"] = net["finetune"] = tf.squeeze( net["finetune"], [1, 2], name='nima/fc8/squeezed')
+  return net, end_points
+
+#     predictions = net["finetune"]
+
 
 def slim_learning_create_train_op_with_manual_grads( total_loss, 
             optimizers,       # list of optimizers 
