@@ -158,47 +158,83 @@ class TestNimaUtils(object):
 from models.research.slim.nets import vgg
 from tensorflow.contrib import slim
 
-def nima_vgg16(inputs, num_classes, h_params, is_training=True):
-  """Build Nima model with baseline from Vgg16 (with last layer removed) and
-  finetune layer of fully_connected nodes with n=num_classes with softmax activations
+# copied from nets.vgg.vgg_16 with slight modifications
+def nima_vgg_16(inputs,
+           num_classes=10,
+           is_training=True,
+           dropout_keep_prob=0.5,
+           dropout7_keep_prob=0.5,        # added kvarg to change value for dropout7 only
+           spatial_squeeze=True,
+           scope='vgg_16',
+           fc_conv_padding='VALID',
+           global_pool=False):
+  """Oxford Net VGG 16-Layers version D Example.
 
-  Arguments:
-    inputs: Tensor of [m, 224,224,3] images
-    num_classes: number of classes for last fully_connected layer
-  
+  Note: All the fully_connected layers have been transformed to conv2d layers.
+        To use in classification mode, resize input to 224x224.
+
+  Args:
+    inputs: a tensor of size [batch_size, height, width, channels].
+    num_classes: number of predicted classes. If 0 or None, the logits layer is
+      omitted and the input features to the logits layer are returned instead.
+    is_training: whether or not the model is being trained.
+    dropout_keep_prob: the probability that activations are kept in the dropout
+      layers during training.
+    spatial_squeeze: whether or not should squeeze the spatial dimensions of the
+      outputs. Useful to remove unnecessary dimensions for classification.
+    scope: Optional scope for the variables.
+    fc_conv_padding: the type of padding to use for the fully connected layer
+      that is implemented as a convolutional layer. Use 'SAME' padding if you
+      are applying the network in a fully convolutional manner and want to
+      get a prediction map downsampled by a factor of 32 as an output.
+      Otherwise, the output prediction map will be (input / 32) - 6 in case of
+      'VALID' padding.
+    global_pool: Optional boolean flag. If True, the input to the classification
+      layer is avgpooled to size 1x1, for any input size. (This is not part
+      of the original VGG architecture.)
+
   Returns:
-    Tuple (net, end_points)
-      net=Dictionary with 2 keys, ["baseline", "finetune"], and model as values
-      end_points: end points for the model
+    net: the output of the logits layer (if num_classes is a non-zero integer),
+      or the input to the logits layer (if num_classes is 0 or None).
+    end_points: a dict of tensors with intermediate activations.
   """
-  #
-  # load the model, use the default arg scope to configure the batch norm parameters.
-  #
-  net = { 
-      "baseline": "baseline image classifier with last layer removed", 
-      "finetune": "finetuning layer with softmax activations, n=10 for AVA, 9 for TID2013"
-  }
-  with slim.arg_scope(vgg.vgg_arg_scope()):
-      # define baseline network with last layer removed
-      net["baseline"], end_points = vgg.vgg_16(inputs, 
-#                                      dropout_keep_prob=0.5,
-#                                      weight_decay=0.0005,  
-                                    num_classes=None,
-                                    is_training=is_training,
-                                    )
-      
-      # define finetuning network, dropout, fc, softmax
-      dropout_keep_prob=h_params["dropout_keep"]
-      net["finetune"] = slim.dropout( net["baseline"], dropout_keep_prob,
-                                      is_training=is_training,
-                                      scope='nima/dropout7' )
-      net["finetune"] = slim.fully_connected( net["finetune"], num_classes,
-                                              activation_fn=tf.nn.softmax,
-                                              scope='nima/fc8' )
-      end_points["nima/fc8"] = net["finetune"] = tf.squeeze( net["finetune"], [1, 2], name='nima/fc8/squeezed')
-  return net, end_points
+  with tf.variable_scope(scope, 'vgg_16', [inputs]) as sc:
+    end_points_collection = sc.original_name_scope + '_end_points'
+    # Collect outputs for conv2d, fully_connected and max_pool2d.
+    with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d],
+                        outputs_collections=end_points_collection):
+      net = slim.repeat(inputs, 2, slim.conv2d, 64, [3, 3], scope='conv1')
+      net = slim.max_pool2d(net, [2, 2], scope='pool1')
+      net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3], scope='conv2')
+      net = slim.max_pool2d(net, [2, 2], scope='pool2')
+      net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3], scope='conv3')
+      net = slim.max_pool2d(net, [2, 2], scope='pool3')
+      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv4')
+      net = slim.max_pool2d(net, [2, 2], scope='pool4')
+      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv5')
+      net = slim.max_pool2d(net, [2, 2], scope='pool5')
 
-#     predictions = net["finetune"]
+      # Use conv2d instead of fully_connected layers.
+      net = slim.conv2d(net, 4096, [7, 7], padding=fc_conv_padding, scope='fc6')
+      net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
+                         scope='dropout6')
+      net = slim.conv2d(net, 4096, [1, 1], scope='fc7')
+      # Convert end_points_collection into a end_point dict.
+      end_points = slim.utils.convert_collection_to_dict(end_points_collection)
+      if global_pool:
+        net = tf.reduce_mean(net, [1, 2], keep_dims=True, name='global_pool')
+        end_points['global_pool'] = net
+      if num_classes:
+        net = slim.dropout(net, dropout7_keep_prob, is_training=is_training,
+                           scope='dropout7')
+        net = slim.conv2d(net, num_classes, [1, 1],
+                          activation_fn=None,
+                          normalizer_fn=None,
+                          scope='fc8')
+        if spatial_squeeze and num_classes is not None:
+          net = tf.squeeze(net, [1, 2], name='fc8/squeezed')
+        end_points[sc.name + '/fc8'] = net
+      return net, end_points
 
 
 def slim_learning_create_train_op_with_manual_grads( total_loss, 
