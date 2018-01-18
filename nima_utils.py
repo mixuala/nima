@@ -155,11 +155,10 @@ class TestNimaUtils(object):
 
 
 # Nima Model based on Vgg16 for training against AVA dataset
-%cd $SLIM
-from nets import vgg
+from models.research.slim.nets import vgg
 from tensorflow.contrib import slim
 
-def nima_vgg16(inputs, num_classes, h_params):
+def nima_vgg16(inputs, num_classes, h_params, is_training=True):
   """Build Nima model with baseline from Vgg16 (with last layer removed) and
   finetune layer of fully_connected nodes with n=num_classes with softmax activations
 
@@ -183,7 +182,9 @@ def nima_vgg16(inputs, num_classes, h_params):
       # define baseline network with last layer removed
       net["baseline"], end_points = vgg.vgg_16(inputs, 
 #                                      dropout_keep_prob=0.5,
+#                                      weight_decay=0.0005,  
                                     num_classes=None,
+                                    is_training=is_training,
                                     )
       
       # define finetuning network, dropout, fc, softmax
