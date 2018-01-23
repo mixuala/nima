@@ -29,13 +29,14 @@ def _cum_CDF (x):
       axis=1 )
   return tf.reshape(y, [m,n] )
 
-def _emd(y, y_hat):
+def _emd(y, y_hat, reduce_mean=True):
     """Returns the earth mover distance between to arrays of ratings, 
     based on cumulative distribution function
     
     Args:
       y, y_hat: a mini-batch of ratings, each composed of a count of scores 
                 shape = (None, n), array of count of scores for score from 1..n
+      reduce_mean: apply tf.reduce_mean()
 
     Returns:
       float 
@@ -45,8 +46,7 @@ def _emd(y, y_hat):
     N = tf.to_float(n)
     cdf_loss = tf.subtract(_cum_CDF(y), _cum_CDF(y_hat))
     emd_loss = tf.pow( tf.divide( tf.reduce_sum( tf.pow(cdf_loss, r), axis=1 ), N), 1/r)
-  #   return tf.reshape(emd_loss, [m,1])
-    return tf.reduce_mean(emd_loss)
+    return tf.reduce_mean(emd_loss) if reduce_mean else tf.reshape(emd_loss, [m,1])
 
 
 class NimaUtils(object):
@@ -55,11 +55,11 @@ class NimaUtils(object):
     NimaUtils.score( y ) returns [[mean, std]]
   """
   @staticmethod
-  def emd(y, y_hat):
-    return _emd(y, y_hat)
+  def emd(y, y_hat, reduce_mean=True):
+    return _emd(y, y_hat, reduce_mean)
 
   @staticmethod
-  def mu(y, shape=None):
+  def mu(y):
     """mean quality score for ratings
     
     Args:
@@ -75,7 +75,7 @@ class NimaUtils(object):
     return tf.reshape(mean, [m,1])
   
   @staticmethod
-  def sigma(y, shape=None):
+  def sigma(y):
     """standard deviation of ratings
     
     Args:
@@ -96,6 +96,7 @@ class NimaUtils(object):
   @staticmethod
   def score(y):
     """returns [mean quality score, stddev] for each row"""
+    y = tf.to_float(y)
     return tf.concat([NimaUtils.mu(y), NimaUtils.sigma(y)], axis=1)
 
 
@@ -164,6 +165,7 @@ def nima_vgg_16(inputs,
            is_training=True,
            dropout_keep_prob=0.5,
            dropout7_keep_prob=0.5,        # added kvarg to change value for dropout7 only
+           weight_decay=0.0005,           # added to include scope specification
            spatial_squeeze=True,
            scope='vgg_16',
            fc_conv_padding='VALID',
@@ -180,6 +182,8 @@ def nima_vgg_16(inputs,
     is_training: whether or not the model is being trained.
     dropout_keep_prob: the probability that activations are kept in the dropout
       layers during training.
+    dropout7_keep_prob: ADDED to allow specification of value different from prior 
+      layers
     spatial_squeeze: whether or not should squeeze the spatial dimensions of the
       outputs. Useful to remove unnecessary dimensions for classification.
     scope: Optional scope for the variables.
@@ -198,43 +202,44 @@ def nima_vgg_16(inputs,
       or the input to the logits layer (if num_classes is 0 or None).
     end_points: a dict of tensors with intermediate activations.
   """
-  with tf.variable_scope(scope, 'vgg_16', [inputs]) as sc:
-    end_points_collection = sc.original_name_scope + '_end_points'
-    # Collect outputs for conv2d, fully_connected and max_pool2d.
-    with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d],
-                        outputs_collections=end_points_collection):
-      net = slim.repeat(inputs, 2, slim.conv2d, 64, [3, 3], scope='conv1')
-      net = slim.max_pool2d(net, [2, 2], scope='pool1')
-      net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3], scope='conv2')
-      net = slim.max_pool2d(net, [2, 2], scope='pool2')
-      net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3], scope='conv3')
-      net = slim.max_pool2d(net, [2, 2], scope='pool3')
-      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv4')
-      net = slim.max_pool2d(net, [2, 2], scope='pool4')
-      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv5')
-      net = slim.max_pool2d(net, [2, 2], scope='pool5')
+  with slim.arg_scope(vgg.vgg_arg_scope(weight_decay)):
+    with tf.variable_scope(scope, 'vgg_16', [inputs]) as sc:
+      end_points_collection = sc.original_name_scope + '_end_points'
+      # Collect outputs for conv2d, fully_connected and max_pool2d.
+      with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d],
+                          outputs_collections=end_points_collection):
+        net = slim.repeat(inputs, 2, slim.conv2d, 64, [3, 3], scope='conv1')
+        net = slim.max_pool2d(net, [2, 2], scope='pool1')
+        net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3], scope='conv2')
+        net = slim.max_pool2d(net, [2, 2], scope='pool2')
+        net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3], scope='conv3')
+        net = slim.max_pool2d(net, [2, 2], scope='pool3')
+        net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv4')
+        net = slim.max_pool2d(net, [2, 2], scope='pool4')
+        net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv5')
+        net = slim.max_pool2d(net, [2, 2], scope='pool5')
 
-      # Use conv2d instead of fully_connected layers.
-      net = slim.conv2d(net, 4096, [7, 7], padding=fc_conv_padding, scope='fc6')
-      net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
-                         scope='dropout6')
-      net = slim.conv2d(net, 4096, [1, 1], scope='fc7')
-      # Convert end_points_collection into a end_point dict.
-      end_points = slim.utils.convert_collection_to_dict(end_points_collection)
-      if global_pool:
-        net = tf.reduce_mean(net, [1, 2], keep_dims=True, name='global_pool')
-        end_points['global_pool'] = net
-      if num_classes:
-        net = slim.dropout(net, dropout7_keep_prob, is_training=is_training,
-                           scope='dropout7')
-        net = slim.conv2d(net, num_classes, [1, 1],
-                          activation_fn=None,
-                          normalizer_fn=None,
-                          scope='fc8')
-        if spatial_squeeze and num_classes is not None:
-          net = tf.squeeze(net, [1, 2], name='fc8/squeezed')
-        end_points[sc.name + '/fc8'] = net
-      return net, end_points
+        # Use conv2d instead of fully_connected layers.
+        net = slim.conv2d(net, 4096, [7, 7], padding=fc_conv_padding, scope='fc6')
+        net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
+                          scope='dropout6')
+        net = slim.conv2d(net, 4096, [1, 1], scope='fc7')
+        # Convert end_points_collection into a end_point dict.
+        end_points = slim.utils.convert_collection_to_dict(end_points_collection)
+        if global_pool:
+          net = tf.reduce_mean(net, [1, 2], keep_dims=True, name='global_pool')
+          end_points['global_pool'] = net
+        if num_classes:
+          net = slim.dropout(net, dropout7_keep_prob, is_training=is_training,
+                            scope='dropout7')
+          net = slim.conv2d(net, num_classes, [1, 1],
+                            activation_fn=None,
+                            normalizer_fn=None,
+                            scope='fc8')
+          if spatial_squeeze and num_classes is not None:
+            net = tf.squeeze(net, [1, 2], name='fc8/squeezed')
+          end_points[sc.name + '/fc8'] = net
+        return net, end_points
 
 
 def slim_learning_create_train_op_with_manual_grads( total_loss, 
