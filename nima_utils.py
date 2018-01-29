@@ -29,7 +29,7 @@ def _cum_CDF (x):
       axis=1 )
   return tf.reshape(y, [m,n] )
 
-def _emd(y, y_hat, reduce_mean=True):
+def _emd(y, y_hat, reduce_mean=True, are=2):
     """Returns the earth mover distance between to arrays of ratings, 
     based on cumulative distribution function
     
@@ -37,11 +37,12 @@ def _emd(y, y_hat, reduce_mean=True):
       y, y_hat: a mini-batch of ratings, each composed of a count of scores 
                 shape = (None, n), array of count of scores for score from 1..n
       reduce_mean: apply tf.reduce_mean()
+      are: "r" for square loss (default) or r=1 for absolute val
 
     Returns:
       float 
     """
-    r = 2.
+    r=are
     m,n = tf.convert_to_tensor(y).get_shape().as_list()
     N = tf.to_float(n)
     cdf_loss = tf.subtract(_cum_CDF(y), _cum_CDF(y_hat))
@@ -99,6 +100,73 @@ class NimaUtils(object):
     y = tf.to_float(y)
     return tf.concat([NimaUtils.mu(y), NimaUtils.sigma(y)], axis=1)
 
+  @staticmethod
+  def spearman_rank(y, y_hat):
+    """returns the Spearman Ranked Correlation Coefficinet of the batch
+      see: https://stackoverflow.com/questions/38487410/possible-to-use-rank-correlation-as-cost-function-in-tensorflow
+      https://geographyfieldwork.com/SpearmansRank.htm 
+
+      Returns tf.float32 [-1..1]
+    """
+    try:
+      m,n = y.get_shape().as_list()
+    except:
+      m,n = np.shape(y)
+
+    if n > 1:
+      # derive stddev from ratings
+      predictions_batch = tf.squeeze(NimaUtils.mu(y_hat))
+      labels_batch = tf.squeeze(NimaUtils.mu(y))
+    else:
+      # assume we already have stddev values
+      predictions_batch = tf.squeeze(y_hat)
+      labels_batch = tf.squeeze(y)
+
+    predictions_rank = tf.nn.top_k(predictions_batch, k=m, sorted=True, name='prediction_rank').indices
+    real_rank = tf.nn.top_k(labels_batch, k=m, sorted=True, name='real_rank').indices
+    rank_diffs = predictions_rank - real_rank
+    rank_diffs_squared_sum = tf.reduce_sum(rank_diffs * rank_diffs)
+    six = tf.constant(6)
+    one = tf.constant(1.0)
+    numerator = tf.cast(six * rank_diffs_squared_sum, dtype=tf.float32)
+    divider = tf.cast(m * m * m - m, dtype=tf.float32)
+    spearman_batch = one - numerator / divider
+    return spearman_batch
+
+
+  def linear_correlation(y, y_hat):
+    """returns the linear correlation coefficient
+      see: https://www.mathway.com/examples/statistics/correlation-and-regression/finding-the-linear-correlation-coefficient?id=328
+
+    Returns: tf.float32 [-1..1]  
+    """
+    try:
+      m,n = y.get_shape().as_list()
+    except:
+      m,n = np.shape(y)
+
+    if n > 1:
+      # derive stddev from ratings
+      predictions_batch = NimaUtils.mu(y_hat)
+      labels_batch = NimaUtils.mu(y)
+    else:
+      # assume we already have stddev values
+      predictions_batch = y_hat
+      labels_batch = y
+
+    sum_y = tf.squeeze(tf.reduce_sum(labels_batch, axis=0))
+    sum_y2 = tf.squeeze(tf.reduce_sum(tf.square(labels_batch), axis=0))
+    sum_y_hat = tf.squeeze(tf.reduce_sum(predictions_batch, axis=0))
+    sum_y_hat2 = tf.squeeze(tf.reduce_sum(tf.square(predictions_batch), axis=0))
+    yy_hat_matmul = tf.squeeze(tf.matmul(tf.transpose(labels_batch),predictions_batch))  # [1 m] * [ m 1] = [1 1]
+
+    numerator = (m * yy_hat_matmul) - (sum_y * sum_y_hat)
+    denominator = tf.sqrt((m*sum_y2)-tf.square(sum_y)) * tf.sqrt((m*sum_y_hat2)-tf.square(sum_y_hat))
+
+    lcc = numerator/denominator
+    return lcc
+
+
 
 class TestNimaUtils(object):
   """
@@ -116,7 +184,7 @@ class TestNimaUtils(object):
             for count in range(np.int(y[j,k])):
                 x.append(k+1)
         res.append(x)
-    return res
+    return np.asarray(res)
   
   @staticmethod
   def npscore(y):
@@ -126,7 +194,7 @@ class TestNimaUtils(object):
     x = TestNimaUtils.np_expand_ratings(y)
     for j in range(m):
         res.append([np.mean(x[j]), np.std(x[j])])
-    return res
+    return np.asarray(res)
 
   @staticmethod
   def test_score(y):
@@ -165,7 +233,7 @@ def nima_vgg_16(inputs,
            is_training=True,
            dropout_keep_prob=0.5,
            dropout7_keep_prob=0.5,        # added kvarg to change value for dropout7 only
-           weight_decay=0.0005,           # added to include scope specification
+           weight_decay=0.0005,
            spatial_squeeze=True,
            scope='vgg_16',
            fc_conv_padding='VALID',
@@ -202,44 +270,48 @@ def nima_vgg_16(inputs,
       or the input to the logits layer (if num_classes is 0 or None).
     end_points: a dict of tensors with intermediate activations.
   """
-  with slim.arg_scope(vgg.vgg_arg_scope(weight_decay)):
-    with tf.variable_scope(scope, 'vgg_16', [inputs]) as sc:
-      end_points_collection = sc.original_name_scope + '_end_points'
-      # Collect outputs for conv2d, fully_connected and max_pool2d.
-      with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d],
-                          outputs_collections=end_points_collection):
-        net = slim.repeat(inputs, 2, slim.conv2d, 64, [3, 3], scope='conv1')
-        net = slim.max_pool2d(net, [2, 2], scope='pool1')
-        net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3], scope='conv2')
-        net = slim.max_pool2d(net, [2, 2], scope='pool2')
-        net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3], scope='conv3')
-        net = slim.max_pool2d(net, [2, 2], scope='pool3')
-        net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv4')
-        net = slim.max_pool2d(net, [2, 2], scope='pool4')
-        net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv5')
-        net = slim.max_pool2d(net, [2, 2], scope='pool5')
+  # with slim.arg_scope(vgg.vgg_arg_scope(weight_decay=0.0005)):
+  with tf.variable_scope(scope, 'vgg_16', [inputs]) as sc:
+    end_points_collection = sc.original_name_scope + '_end_points'
+    # Collect outputs for conv2d, fully_connected and max_pool2d.
+    with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d],
+                        outputs_collections=end_points_collection):
+      net = slim.repeat(inputs, 2, slim.conv2d, 64, [3, 3], scope='conv1')
+      net = slim.max_pool2d(net, [2, 2], scope='pool1')
+      net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3], scope='conv2')
+      net = slim.max_pool2d(net, [2, 2], scope='pool2')
+      net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3], scope='conv3')
+      net = slim.max_pool2d(net, [2, 2], scope='pool3')
+      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv4')
+      net = slim.max_pool2d(net, [2, 2], scope='pool4')
+      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv5')
+      net = slim.max_pool2d(net, [2, 2], scope='pool5')
 
-        # Use conv2d instead of fully_connected layers.
-        net = slim.conv2d(net, 4096, [7, 7], padding=fc_conv_padding, scope='fc6')
-        net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
-                          scope='dropout6')
-        net = slim.conv2d(net, 4096, [1, 1], scope='fc7')
-        # Convert end_points_collection into a end_point dict.
-        end_points = slim.utils.convert_collection_to_dict(end_points_collection)
-        if global_pool:
-          net = tf.reduce_mean(net, [1, 2], keep_dims=True, name='global_pool')
-          end_points['global_pool'] = net
-        if num_classes:
-          net = slim.dropout(net, dropout7_keep_prob, is_training=is_training,
-                            scope='dropout7')
-          net = slim.conv2d(net, num_classes, [1, 1],
-                            activation_fn=None,
-                            normalizer_fn=None,
-                            scope='fc8')
-          if spatial_squeeze and num_classes is not None:
-            net = tf.squeeze(net, [1, 2], name='fc8/squeezed')
-          end_points[sc.name + '/fc8'] = net
-        return net, end_points
+      # Use conv2d instead of fully_connected layers.
+      net = slim.conv2d(net, 4096, [7, 7], padding=fc_conv_padding, scope='fc6')
+      net = slim.dropout(net, dropout_keep_prob, is_training=is_training,
+                        scope='dropout6')
+      net = slim.conv2d(net, 4096, [1, 1], scope='fc7')
+      # Convert end_points_collection into a end_point dict.
+      end_points = slim.utils.convert_collection_to_dict(end_points_collection)
+      if global_pool:
+        net = tf.reduce_mean(net, [1, 2], keep_dims=True, name='global_pool')
+        end_points['global_pool'] = net
+      if num_classes:
+        net = slim.dropout(net, dropout7_keep_prob, is_training=is_training,
+                          scope='dropout7')
+        net = slim.conv2d(net, num_classes, [1, 1],
+                          activation_fn=None,
+                          normalizer_fn=None,
+                          scope='fc8')
+        if spatial_squeeze and num_classes is not None:
+          net = tf.squeeze(net, [1, 2], name='fc8/squeezed')
+        end_points[sc.name + '/fc8'] = net
+      return net, end_points
+
+def scoped_nima_vgg_16(inputs, weight_decay=0.0005,  **kwargs):
+  with slim.arg_scope(vgg.vgg_arg_scope(weight_decay)):
+    return nima_vgg_16(inputs, **kwargs)
 
 
 def slim_learning_create_train_op_with_manual_grads( total_loss, 
