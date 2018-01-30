@@ -109,28 +109,29 @@ class NimaUtils(object):
       Returns tf.float32 [-1..1]
     """
     try:
+      y = tf.to_float(y)
       m,n = y.get_shape().as_list()
     except:
       m,n = np.shape(y)
 
     if n > 1:
       # derive stddev from ratings
-      predictions_batch = tf.squeeze(NimaUtils.mu(y_hat))
-      labels_batch = tf.squeeze(NimaUtils.mu(y))
+      y_hat_batch = tf.squeeze(NimaUtils.mu(y_hat))
+      y_batch = tf.squeeze(NimaUtils.mu(y))
     else:
       # assume we already have stddev values
-      predictions_batch = tf.squeeze(y_hat)
-      labels_batch = tf.squeeze(y)
-
-    predictions_rank = tf.nn.top_k(predictions_batch, k=m, sorted=True, name='prediction_rank').indices
-    real_rank = tf.nn.top_k(labels_batch, k=m, sorted=True, name='real_rank').indices
-    rank_diffs = predictions_rank - real_rank
+      y_hat_batch = tf.squeeze(y_hat)
+      y_batch = tf.squeeze(y)
+    
+    y_hat_rank = tf.nn.top_k(y_hat_batch, k=m, sorted=True, name='y_hat_rank').indices
+    y_rank = tf.nn.top_k(y_batch, k=m, sorted=True, name='y_rank').indices
+    rank_diffs = y_hat_rank - y_rank
     rank_diffs_squared_sum = tf.reduce_sum(rank_diffs * rank_diffs)
     six = tf.constant(6)
     one = tf.constant(1.0)
     numerator = tf.cast(six * rank_diffs_squared_sum, dtype=tf.float32)
     divider = tf.cast(m * m * m - m, dtype=tf.float32)
-    spearman_batch = one - numerator / divider
+    spearman_batch = one - (numerator / divider)
     return spearman_batch
 
 
@@ -141,6 +142,7 @@ class NimaUtils(object):
     Returns: tf.float32 [-1..1]  
     """
     try:
+      y = tf.to_float(y)
       m,n = y.get_shape().as_list()
     except:
       m,n = np.shape(y)
