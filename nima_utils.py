@@ -11,13 +11,23 @@ def _weighted_score(x):
   m,n = tf.convert_to_tensor(x).get_shape().as_list()
   return tf.multiply(x, tf.range(1, n+1 , dtype=tf.float32))  # (None,10)
 
-def _CDF (k, x):
+def _CDF0 (k, x):
   # assert k <= tf.shape(x)[1]
   m,n = tf.convert_to_tensor(x).get_shape().as_list()
   w_score = _weighted_score(x)        # (None,10)
   cum_k_score = tf.reduce_sum(w_score[:,:k], axis=1)  # (None)
   total = tf.reduce_sum(w_score, axis=1)  # (None)
   cdf = tf.divide(cum_k_score, total)     # (None)
+  return tf.reshape(cdf, [m,1] ) # (None,1)
+
+def _CDF (k, x):
+  # same as _CDF0, more perforamnt(?)
+  m,n = tf.convert_to_tensor(x).get_shape().as_list()  
+  x = tf.to_float(x)
+  x_slice = x[:,0:k]
+  cs = tf.reduce_sum(tf.cumsum(x_slice, axis=1, reverse=True), axis=1)
+  total = tf.reduce_sum(tf.cumsum(x, axis=1, reverse=True), axis=1)
+  cdf = tf.divide(cs, total) 
   return tf.reshape(cdf, [m,1] ) # (None,1)
 
 def _cum_CDF (x):
@@ -44,9 +54,9 @@ def _emd(y, y_hat, reduce_mean=True, are=2):
     """
     r=are
     m,n = tf.convert_to_tensor(y).get_shape().as_list()
-    N = tf.to_float(n)
     cdf_loss = tf.subtract(_cum_CDF(y), _cum_CDF(y_hat))
-    emd_loss = tf.pow( tf.divide( tf.reduce_sum( tf.pow(cdf_loss, r), axis=1 ), N), 1/r)
+    emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r), axis=1 ), 1/r)
+    # emd_rmse = tf.sqrt( tf.reduce_mean( tf.square( cdf_loss ) ) ) 
     return tf.reduce_mean(emd_loss) if reduce_mean else tf.reshape(emd_loss, [m,1])
 
 
