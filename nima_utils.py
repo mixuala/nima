@@ -55,9 +55,11 @@ def _emd(y, y_hat, reduce_mean=True, are=2):
     r=are
     m,n = tf.convert_to_tensor(y).get_shape().as_list()
     cdf_loss = tf.subtract(_cum_CDF(y), _cum_CDF(y_hat))
-    emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r), axis=1 ), 1/r)
-    # emd_rmse = tf.sqrt( tf.reduce_mean( tf.square( cdf_loss ) ) ) 
-    return tf.reduce_mean(emd_loss) if reduce_mean else tf.reshape(emd_loss, [m,1])
+    if reduce_mean:
+      return emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r) ), 1/r)
+    else:
+      emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r), axis=1 ), 1/r)
+      return  tf.reshape(emd_loss, [m,1])
 
 
 class NimaUtils(object):
