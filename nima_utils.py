@@ -92,16 +92,16 @@ class NimaUtils(object):
     """mean quality score for ratings
     
     Args:
-      y, y_hat: a mini-batch of ratings, each composed of a count of scores 
+      y: a mini-batch of ratings, each composed of a count of scores 
                 shape = (None, n), array of count of scores for score from 1..n
 
     Returns:
       array of [mean] floats for each row in y
     """
-    m,n = tf.convert_to_tensor(x).get_shape().as_list()  
-    x = tf.to_float(x)
-    cs = tf.reduce_sum(tf.cumsum(x, axis=1, reverse=True), axis=1)
-    total = tf.reduce_sum(x, axis=1)
+    m,n = tf.convert_to_tensor(y).get_shape().as_list()  
+    y = tf.to_float(y)
+    cs = tf.reduce_sum(tf.cumsum(y, axis=1, reverse=True), axis=1)
+    total = tf.reduce_sum(y, axis=1)
     return tf.reshape(cs/total, [m,1] ) # (None,1) [m,1]
   
   @staticmethod
