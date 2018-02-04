@@ -11,33 +11,48 @@ def _weighted_score(x):
   m,n = tf.convert_to_tensor(x).get_shape().as_list()
   return tf.multiply(x, tf.range(1, n+1 , dtype=tf.float32))  # (None,10)
 
-def _CDF0 (k, x):
-  # assert k <= tf.shape(x)[1]
-  m,n = tf.convert_to_tensor(x).get_shape().as_list()
-  w_score = _weighted_score(x)        # (None,10)
-  cum_k_score = tf.reduce_sum(w_score[:,:k], axis=1)  # (None)
-  total = tf.reduce_sum(w_score, axis=1)  # (None)
-  cdf = tf.divide(cum_k_score, total)     # (None)
-  return tf.reshape(cdf, [m,1] ) # (None,1)
+# def _CDF0 (k, x):
+#   # assert k <= tf.shape(x)[1]
+#   m,n = tf.convert_to_tensor(x).get_shape().as_list()
+#   w_score = _weighted_score(x)        # (None,10)
+#   cum_k_score = tf.reduce_sum(w_score[:,:k], axis=1)  # (None)
+#   total = tf.reduce_sum(w_score, axis=1)  # (None)
+#   cdf = tf.divide(cum_k_score, total)     # (None)
+#   return tf.reshape(cdf, [m,1] ) # (None,1)
 
-def _CDF (k, x):
-  # same as _CDF0, more perforamnt(?)
-  m,n = tf.convert_to_tensor(x).get_shape().as_list()  
-  x = tf.to_float(x)
-  x_slice = x[:,0:k]
-  cs = tf.reduce_sum(tf.cumsum(x_slice, axis=1, reverse=True), axis=1)
-  total = tf.reduce_sum(tf.cumsum(x, axis=1, reverse=True), axis=1)
-  cdf = tf.divide(cs, total) 
-  return tf.reshape(cdf, [m,1] ) # (None,1)
+# def _CDF (k, x):
+#   # same as _CDF0, more perforamnt(?)
+#   m,n = tf.convert_to_tensor(x).get_shape().as_list()  
+#   x = tf.to_float(x)
+#   x_slice = x[:,0:k]
+#   cs = tf.reduce_sum(tf.cumsum(x_slice, axis=1, reverse=True), axis=1)
+#   total = tf.reduce_sum(tf.cumsum(x, axis=1, reverse=True), axis=1)
+#   cdf = tf.divide(cs, total) 
+#   return tf.reshape(cdf, [m,1] ) # (None,1)
 
-def _cum_CDF (x):
-  # y = tf.concat( [   _CDF(i,x)    for i in tf.range(1, tf.shape(x)[1]+1) ] )
+# # this implementation for cdf converts ratings to their weighted sum point values, 
+# # I am not sure it is a correct implementation of cdf()
+# def _cum_CDF_weighted (x):
+#   # e.g. cdf([1,1,1,1]) ==  [ 0.1,  0.3,  0.6,  1.]
+#   x = tf.to_float(x)
+#   m,n = tf.convert_to_tensor(x).get_shape().as_list()
+#   y = tf.concat( [_CDF(1,x),_CDF(2,x),_CDF(3,x),_CDF(4,x),_CDF(5,x),
+#       _CDF(6,x),_CDF(7,x),_CDF(8,x),_CDF(9,x),_CDF(10,x)], 
+#       axis=1 )
+#   return tf.reshape(y, [m,n] )
+
+
+
+
+# this implementation ignores the weighted sum of rating values and uses the ratings as given
+# I believe this is correct because CDF(rating) exists independent scores from weighted ratings
+def _cum_CDF (x): 
+  # e.g. cdf([1,1,1,1]) ==  [ 0.25,  0.5 ,  0.75,  1.  ]  
   x = tf.to_float(x)
-  m,n = tf.convert_to_tensor(x).get_shape().as_list()
-  y = tf.concat( [_CDF(1,x),_CDF(2,x),_CDF(3,x),_CDF(4,x),_CDF(5,x),
-      _CDF(6,x),_CDF(7,x),_CDF(8,x),_CDF(9,x),_CDF(10,x)], 
-      axis=1 )
-  return tf.reshape(y, [m,n] )
+  cs = tf.cumsum(x, axis=1, reverse=False)
+  total = cs[:,-1:]           # last column == cumulative sum
+  cdf = tf.divide(cs, total)
+  return cdf
 
 def _emd(y, y_hat, reduce_mean=True, are=2):
     """Returns the earth mover distance between to arrays of ratings, 
@@ -83,10 +98,11 @@ class NimaUtils(object):
     Returns:
       array of [mean] floats for each row in y
     """
-    y = tf.convert_to_tensor(y)
-    m,n = y.get_shape().as_list()
-    mean = tf.reduce_sum(_weighted_score(y), axis=1)/tf.reduce_sum(y, axis=1)
-    return tf.reshape(mean, [m,1])
+    m,n = tf.convert_to_tensor(x).get_shape().as_list()  
+    x = tf.to_float(x)
+    cs = tf.reduce_sum(tf.cumsum(x, axis=1, reverse=True), axis=1)
+    total = tf.reduce_sum(x, axis=1)
+    return tf.reshape(cs/total, [m,1] ) # (None,1) [m,1]
   
   @staticmethod
   def sigma(y):
