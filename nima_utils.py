@@ -79,7 +79,7 @@ def _emd(y, y_hat, reduce_mean=True, are=2):
 
 
 class NimaUtils(object):
-  """Help Class for Nima calculations
+  """Helper Class for Nima calculations
     NimaUtils.emd(y, y_hat) return float
     NimaUtils.score( y ) returns [[mean, std]]
   """
@@ -130,6 +130,14 @@ class NimaUtils(object):
     return tf.concat([NimaUtils.mu(y), NimaUtils.sigma(y)], axis=1)
 
   @staticmethod
+  """returns the rmse [mean, stddev] values for a mini-batch y, y_hat
+  """
+  def rmse_score(y, y_hat):
+    score_losses = NimaUtils.score(y) - NimaUtils.score(y_hat)
+    rmse_scores = tf.sqrt(tf.reduce_mean(tf.square(score_losses), axis=0))
+    return tf.squeeze(rmse_scores)
+
+  @staticmethod
   def spearman_rank(y, y_hat):
     """returns the Spearman Ranked Correlation Coefficinet of the batch
       see: https://stackoverflow.com/questions/38487410/possible-to-use-rank-correlation-as-cost-function-in-tensorflow
@@ -163,7 +171,7 @@ class NimaUtils(object):
     spearman_batch = one - (numerator / divider)
     return spearman_batch
 
-
+  @staticmethod
   def linear_correlation(y, y_hat):
     """returns the linear correlation coefficient
       see: https://www.mathway.com/examples/statistics/correlation-and-regression/finding-the-linear-correlation-coefficient?id=328
