@@ -135,9 +135,8 @@ class NimaUtils(object):
     return tf.concat([NimaUtils.mu(y), NimaUtils.sigma(y)], axis=1)
 
   @staticmethod
-  """returns the rmse [mean, stddev] values for a mini-batch y, y_hat
-  """
   def rmse_score(y, y_hat):
+    """returns the rmse [mean, stddev] values for a mini-batch y, y_hat"""
     score_losses = NimaUtils.score(y) - NimaUtils.score(y_hat)
     rmse_scores = tf.sqrt(tf.reduce_mean(tf.square(score_losses), axis=0))
     return tf.squeeze(rmse_scores)
