@@ -1,15 +1,20 @@
 
-
 import tensorflow as tf
 import numpy as np
+
+__all__ = [
+  'NimaUtils', 
+  'nima_vgg_16',
+  'slim_learning_create_train_op_with_manual_grads',
+]
 
 """ _CDF in tensorflow """
 #
 # private methods used by class NimaUtils()
 #
-def _weighted_score(x):
-  m,n = tf.convert_to_tensor(x).get_shape().as_list()
-  return tf.multiply(x, tf.range(1, n+1 , dtype=tf.float32))  # (None,10)
+# def _weighted_score(x):
+#   m,n = tf.convert_to_tensor(x).get_shape().as_list()
+#   return tf.multiply(x, tf.range(1, n+1 , dtype=tf.float32))  # (None,10)
 
 # def _CDF0 (k, x):
 #   # assert k <= tf.shape(x)[1]
@@ -383,7 +388,7 @@ def slim_learning_create_train_op_with_manual_grads( total_loss,
   from tensorflow.python.ops import control_flow_ops
   from tensorflow.python.training import training_util
   
-  def transform_grads_fn(grads):
+  def _transform_grads_fn(grads):
       if gradient_multipliers:
           with ops.name_scope('multiply_grads'):
               grads = multiply_gradients(grads, gradient_multipliers)
@@ -402,14 +407,14 @@ def slim_learning_create_train_op_with_manual_grads( total_loss,
   
   ### order of processing:
   # 0. grads = opt.compute_gradients() 
-  # 1. grads = transform_grads_fn(grads)
+  # 1. grads = _transform_grads_fn(grads)
   # 2. add_gradients_summaries(grads)
   # 3. grads = opt.apply_gradients(grads, global_step=global_step) 
   
   grad_updates = []
   for i in range(len(optimizers)):
       grads = grads_and_vars[i]                               # 0. kvarg, from opt.compute_gradients()
-      grads = transform_grads_fn(grads)                       # 1. transform_grads_fn()
+      grads = _transform_grads_fn(grads)                       # 1. _transform_grads_fn()
       if summarize_gradients:
           with ops.name_scope('summarize_grads'):
               slim.learning.add_gradients_summaries(grads)    # 2. add_gradients_summaries()
