@@ -9,44 +9,6 @@ __all__ = [
 ]
 
 """ _CDF in tensorflow """
-#
-# private methods used by class NimaUtils()
-#
-# def _weighted_score(x):
-#   m,n = tf.convert_to_tensor(x).get_shape().as_list()
-#   return tf.multiply(x, tf.range(1, n+1 , dtype=tf.float32))  # (None,10)
-
-# def _CDF0 (k, x):
-#   # assert k <= tf.shape(x)[1]
-#   m,n = tf.convert_to_tensor(x).get_shape().as_list()
-#   w_score = _weighted_score(x)        # (None,10)
-#   cum_k_score = tf.reduce_sum(w_score[:,:k], axis=1)  # (None)
-#   total = tf.reduce_sum(w_score, axis=1)  # (None)
-#   cdf = tf.divide(cum_k_score, total)     # (None)
-#   return tf.reshape(cdf, [m,1] ) # (None,1)
-
-# def _CDF (k, x):
-#   # same as _CDF0, more perforamnt(?)
-#   m,n = tf.convert_to_tensor(x).get_shape().as_list()  
-#   x = tf.to_float(x)
-#   x_slice = x[:,0:k]
-#   cs = tf.reduce_sum(tf.cumsum(x_slice, axis=1, reverse=True), axis=1)
-#   total = tf.reduce_sum(tf.cumsum(x, axis=1, reverse=True), axis=1)
-#   cdf = tf.divide(cs, total) 
-#   return tf.reshape(cdf, [m,1] ) # (None,1)
-
-# # this implementation for cdf converts ratings to their weighted sum point values, 
-# # I am not sure it is a correct implementation of cdf()
-# def _cum_CDF_weighted (x):
-#   # e.g. cdf([1,1,1,1]) ==  [ 0.1,  0.3,  0.6,  1.]
-#   x = tf.to_float(x)
-#   m,n = tf.convert_to_tensor(x).get_shape().as_list()
-#   y = tf.concat( [_CDF(1,x),_CDF(2,x),_CDF(3,x),_CDF(4,x),_CDF(5,x),
-#       _CDF(6,x),_CDF(7,x),_CDF(8,x),_CDF(9,x),_CDF(10,x)], 
-#       axis=1 )
-#   return tf.reshape(y, [m,n] )
-
-
 
 
 # this implementation ignores the weighted sum of rating values and uses the ratings as given
@@ -59,7 +21,7 @@ def _cum_CDF (x):
   cdf = tf.divide(cs, total)
   return cdf
 
-def _emd(y, y_hat, reduce_mean=True, are=2):
+def _emd(y, y_hat, reduce_mean=True, r=2):
     """Returns the earth mover distance between to arrays of ratings, 
     based on cumulative distribution function
     
@@ -67,12 +29,11 @@ def _emd(y, y_hat, reduce_mean=True, are=2):
       y, y_hat: a mini-batch of ratings, each composed of a count of scores 
                 shape = (None, n), array of count of scores for score from 1..n
       reduce_mean: apply tf.reduce_mean()
-      are: "r" for square loss (default) or r=1 for absolute val
+      r: r=2 for rmse loss (default) or r=1 for absolute val
 
     Returns:
       float 
     """
-    r=are
     m,n = tf.convert_to_tensor(y).get_shape().as_list()
     cdf_loss = tf.subtract(_cum_CDF(y), _cum_CDF(y_hat))
     if reduce_mean:
@@ -89,7 +50,7 @@ class NimaUtils(object):
     NimaUtils.score( y ) returns [[mean, std]]
   """
   @staticmethod
-  def emd(y, y_hat, reduce_mean=True):
+  def emd(y, y_hat, reduce_mean=True, r=2):
     return _emd(y, y_hat, reduce_mean)
 
   @staticmethod
@@ -435,3 +396,13 @@ def slim_learning_create_train_op_with_manual_grads( total_loss,
       train_ops.append(train_op)
       
   return train_op
+
+def get_step_from_latest_checkpoint(dir):
+  """get global_step from checkpoint_path when outside of graph"""
+  import re
+  import tensorflow as tf
+  path = tf.train.latest_checkpoint(dir)
+  if not path:
+      return 0
+  found = re.search("(\d+)$", path)
+  return int(found[0]) if found else None    
