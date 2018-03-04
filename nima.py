@@ -21,30 +21,30 @@ PATH.tmp = "/tmp"
 
 
 ### Helpers
-def load_pretrained_weights(net):
-  """download pretrained weights for different imageNet models
-  args:
-    net = [inception_resnet_v2 | vgg_16 | ]
-  """
-  # import settings
-  checkpoint_url={
-    'inception_resnet_v2':"http://download.tensorflow.org/models/inception_resnet_v2_2016_08_30.tar.gz",
-    'vgg_16': "http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz",
-  }
-  is_ckpt_avail = os.path.isdir(PATH.checkpoints)
-  checkpoint = checkpoint_url[net]
-  if not is_ckpt_avail:
-    print("downloading pretrained weights for {}".format(net))
-    os.makedirs(PATH.checkpoints, exist_ok=True)
-    os.chdir(PATH.tmp)
-    # download vgg_16 ckpt
-    !wget $checkpoint
-    tarfile = os.path.basename(checkpoint)
-    !tar -xvf $tarfile -C $PATH.checkpoints
-    os.remove(tarfile)
-    is_ckpt_avail = True
-  else:
-    print("{} ckpt installed".format(net))
+# def load_pretrained_weights(net):
+#   """download pretrained weights for different imageNet models
+#   args:
+#     net = [inception_resnet_v2 | vgg_16 | ]
+#   """
+#   # import settings
+#   checkpoint_url={
+#     'inception_resnet_v2':"http://download.tensorflow.org/models/inception_resnet_v2_2016_08_30.tar.gz",
+#     'vgg_16': "http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz",
+#   }
+#   is_ckpt_avail = os.path.isdir(PATH.checkpoints)
+#   checkpoint = checkpoint_url[net]
+#   if not is_ckpt_avail:
+#     print("downloading pretrained weights for {}".format(net))
+#     os.makedirs(PATH.checkpoints, exist_ok=True)
+#     os.chdir(PATH.tmp)
+#     # download vgg_16 ckpt
+#     !wget $checkpoint
+#     tarfile = os.path.basename(checkpoint)
+#     !tar -xvf $tarfile -C $PATH.checkpoints
+#     os.remove(tarfile)
+#     is_ckpt_avail = True
+#   else:
+#     print("{} ckpt installed".format(net))
 
 
 ### build model 
