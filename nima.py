@@ -1,8 +1,5 @@
 """NiMA neural image assessment with inception_resnet_v2 net"""
 import os
-from nima_utils import slim_learning_create_train_op_with_manual_grads
-from models.research.slim.datasets import dataset_utils, nima_tid, nima_ava
-from models.research.slim.datasets import nima as nima_dataset
 
 
 
@@ -18,6 +15,15 @@ PATH.slim = PATH.home + "/models/research/slim"
 PATH.checkpoints = PATH.home + "/ckpt"
 PATH.tmp = "/tmp"
 
+
+### imports
+from tensorflow.contrib import slim 
+from nima_utils import slim_learning_create_train_op_with_manual_grads
+os.chdir(PATH.slim)
+import datasets
+from nets import inception_resnet_v2 as inception
+from nets import vgg
+os.chdir(PATH.home)
 
 
 ### Helpers
@@ -49,8 +55,8 @@ PATH.tmp = "/tmp"
 
 ### build model 
 def net_inception(images, is_training=True, num_classes_finetune=10, finetune_dropout_keep=0.75):
-  from tensorflow.contrib import slim
-  from nets import inception_resnet_v2 as inception
+  # from tensorflow.contrib import slim
+  # from nets import inception_resnet_v2 as inception
   with slim.arg_scope([slim.conv2d, slim.fully_connected]):
     with slim.arg_scope(inception.inception_resnet_v2_arg_scope()):
       net, end_points = inception.inception_resnet_v2(images, 
@@ -74,8 +80,8 @@ def net_inception(images, is_training=True, num_classes_finetune=10, finetune_dr
   return [net, end_points]
 
 def net_vgg(images, is_training=True, num_classes_finetune=10, finetune_dropout_keep=0.75):
-  from tensorflow.contrib import slim  
-  from nets import vgg
+  # from tensorflow.contrib import slim  
+  # from nets import vgg
   with slim.arg_scope(vgg.vgg_arg_scope(weight_decay=0.0005)):
       net, end_points = vgg.vgg_16(images, 
                           num_classes=None,
@@ -109,12 +115,12 @@ def get_batch(split="train", dataset_dir=None, file_list=None, is_training=True,
   Return:
     tf.train.batch()
   """
-  from models.research.slim.datasets import nima, nima_ava
-  dataset = nima_ava.get_split(split, 
+  # from datasets import nima, nima_ava
+  dataset = datasets.nima_ava.get_split(split, 
                                 dataset_dir=dataset_dir,             # dataset_dir from local fs
                                 file_list=file_list,    # list() of gcloud storage urls
                                 resized=resized)
-  images, images_raw, labels = nima.load_batch(dataset, 
+  images, images_raw, labels = datasets.nima.load_batch(dataset, 
               batch_size=batch_size,
               is_training=is_training,
               resized=resized )
@@ -129,7 +135,7 @@ def get_train_op(total_loss, global_step,
     #   see: https://stackoverflow.com/questions/34945554/how-to-set-layer-wise-learning-rate-in-tensorflow
 
   """
-  from nima_utils import slim_learning_create_train_op_with_manual_grads
+  # from nima_utils import slim_learning_create_train_op_with_manual_grads
 
   split_index = -2     # finetune layer weights & bias, count=2
   model = {"baseline":{}, "finetune":{}}
