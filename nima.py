@@ -17,7 +17,7 @@ PATH.tmp = "/tmp"
 
 
 ### imports
-from tensorflow import tf 
+import tensorflow as tf
 from tensorflow.contrib import slim 
 from nima_utils import slim_learning_create_train_op_with_manual_grads
 
