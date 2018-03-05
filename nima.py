@@ -17,10 +17,12 @@ PATH.tmp = "/tmp"
 
 
 ### imports
+from tensorflow import tf 
 from tensorflow.contrib import slim 
 from nima_utils import slim_learning_create_train_op_with_manual_grads
+
 os.chdir(PATH.slim)
-import datasets
+import datasets.nima, datasets.nima_ava
 from nets import inception_resnet_v2 as inception
 from nets import vgg
 os.chdir(PATH.home)
