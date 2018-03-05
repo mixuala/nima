@@ -159,7 +159,7 @@ def get_train_op(total_loss, global_step,
                                   learning_rate=finetune_learning_rate,
                                   momentum=finetune_momentum
                                   )
-  tf.summary.scalar("learning_rate", lr_decay["finetune"])
+  tf.summary.scalar("learning_rate", finetune_learning_rate)
 
   grads_and_vars = [ zip(model["baseline"]["grads"], model["baseline"]["vars"]), 
                       zip(model["finetune"]["grads"], model["finetune"]["vars"]) ]
