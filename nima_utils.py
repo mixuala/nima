@@ -122,7 +122,7 @@ class NimaUtils(object):
       y: array of shape [?,n], dtype=np.float
     """
     si = np.arange(1, 11, 1, dtype=np.float32)               # [1, n]
-    if not mean: mean = NimaUtils.np_mu(y)  # [m,]
+    if mean is None: mean = NimaUtils.np_mu(y)  # [m,]
     mean = np.reshape(mean, [-1,1])    # [m,1]
     N = np.sum(y, axis=1)
     std = np.sqrt( np.sum(((si - mean) ** 2) * y, axis=1) /N  )
