@@ -486,6 +486,4 @@ def get_step_from_latest_checkpoint(dir):
   if not path:
       return 0
   found = re.search("(\d+)$", path)
-  print(found)
-  return found
-  # return int(found) if found else None    
+  return int(found.group()) if found else None   
