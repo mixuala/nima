@@ -485,7 +485,5 @@ def get_step_from_latest_checkpoint(dir):
   path = tf.train.latest_checkpoint(dir)
   if not path:
       return 0
-  found = re.findall("(\d+)$", path)
-  print(found)
-  print(type(found))
-  return int(found[0]) if found else None    
+  found = re.search("(\d+)$", path).group()
+  return int(found) if found else None    
