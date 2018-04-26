@@ -36,11 +36,11 @@ def _emd(y, y_hat, reduce_mean=True, r=2):
     """
     m,n = tf.convert_to_tensor(y).get_shape().as_list()
     cdf_loss = tf.subtract(_cum_CDF(y), _cum_CDF(y_hat))
+    emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r), axis=1 ), 1/r)
     if reduce_mean:
-      emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r) ), 1/r)
+      emd_loss = tf.reduce_mean(emd_loss)
       return emd_loss
-    else:
-      emd_loss = tf.pow( tf.reduce_mean( tf.pow(cdf_loss, r), axis=1 ), 1/r)
+    else:    
       return  tf.reshape(emd_loss, [m,1])
 
 
